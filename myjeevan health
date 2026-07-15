@@ -1,0 +1,26 @@
+# myjeevan-health
+An enterprise-grade, HIPAA-compliant Clinical Command Center built with React, Tailwind CSS, and Firebase. Features real-time vital telemetry, ward bed allocator, EMR registry, and secure cloud claim processing."
+# 🏥 MyJeevan Health - Enterprise Clinical Command Center
+
+MyJeevan Health is a modern, responsive, and enterprise-grade **Clinical Command Center Dashboard** designed for healthcare facilities. It integrates real-time telemetry, electronic medical records (EMR) management, dynamic ward/bed allocation, and secure cloud database integration for insurance claim auditing using Firebase.
+
+## 🚀 Key Features
+
+- **📊 Master Analytics Dashboard**: Interactive charts showing patient admissions trend and department load distribution (powered by Chart.js).
+- **📁 EMR Patient Registry**: Complete diagnostic records, active treatment plans, and live vitals tracking.
+- **🛏️ Live Ward & Bed Allocator**: Dynamic system to view, assign, or discharge patients from ICU, CCU, and Emergency wards.
+- **📄 Secure Patient Claims System (Firebase-backed)**: A direct portal to push healthcare claims and financial audits to remote Cloud Firestore in real-time.
+- **🚨 Real-Time Telemetry Logs & Alerts**: Simulated live monitoring of patient vitals with critical telemetry alerts.
+- **🎨 Modern Dark UI**: Crafted using React, Tailwind CSS, and Lucide Icons with fully responsive layouts.
+
+## 🛠️ Tech Stack
+
+- **Frontend:** React 18, Tailwind CSS, Lucide Icons
+- **Database:** Google Firebase Firestore
+- **Charts:** Chart.js
+
+## 📁 File Structure
+
+```bash
+├── index.html          # Unified fully-functional Single Page Application (SPA)
+└── README.md           # Project documentation
