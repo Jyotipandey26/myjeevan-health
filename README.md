@@ -1,2 +1,1596 @@
 # myjeevan-health
 An enterprise-grade, HIPAA-compliant Clinical Command Center built with React, Tailwind CSS, and Firebase. Features real-time vital telemetry, ward bed allocator, EMR registry, and secure cloud claim processing."
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyJeevan Health | Enterprise Clinical Command Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        slate: {
+                            950: '#0b0f19',
+                        },
+                        emerald: {
+                            500: '#10b981',
+                            600: '#059669',
+                        },
+                        sky: {
+                            500: '#0ea5e9',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght=300;400;500;600;700;800&family=JetBrains+Mono:wght=400;500;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+        .code-font {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen overflow-x-hidden antialiased">
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Custom Safe Lucide Icon Component
+        const Icon = ({ name, className = "w-5 h-5", size, strokeWidth }) => {
+            const [svg, setSvg] = useState('');
+            useEffect(() => {
+                if (window.lucide) {
+                    const iconNode = window.lucide.icons[name];
+                    if (iconNode) {
+                        const attrs = {
+                            class: className,
+                            ...(size && { width: size, height: size }),
+                            ...(strokeWidth && { 'stroke-width': strokeWidth }),
+                            'stroke': 'currentColor',
+                            'fill': 'none',
+                            'stroke-linecap': 'round',
+                            'stroke-linejoin': 'round'
+                        };
+                        const attrStr = Object.entries(attrs).map(([k, v]) => `${k}="${v}"`).join(' ');
+                        const innerHTML = iconNode.map(node => {
+                            const [tag, tagAttrs] = node;
+                            const tagAttrStr = Object.entries(tagAttrs).map(([k, v]) => `${k}="${v}"`).join(' ');
+                            return `<${tag} ${tagAttrStr}></${tag}>`;
+                        }).join('');
+                        setSvg(`<svg ${attrStr}>${innerHTML}</svg>`);
+                    }
+                }
+            }, [name, className, size, strokeWidth]);
+
+            return svg ? <span dangerouslySetInnerHTML={{ __html: svg }} /> : <span class="w-5 h-5 bg-slate-800 rounded animate-pulse inline-block"></span>;
+        };
+
+        // Patient Data
+        const INITIAL_PATIENTS = [
+            { id: "MJ-2026-9041", name: "Ananya Sharma", age: 34, gender: "Female", bloodGroup: "O+", phone: "+91 98765 43210", admissionDate: "10-Jul-2026", status: "Stable", ward: "General Ward-A", bed: "GW-104", primaryPhysician: "Dr. Alok Mehta", condition: "Post-Appendectomy Recovery", vitals: { hr: 72, bp: "120/80", temp: "98.6°F", spo2: "99%" }, notes: "Patient recovering well. Ambulation started. Scheduled for discharge in 24 hours.", meds: ["Paracetamol 650mg TDS", "Amoxicillin 500mg BD"] },
+            { id: "MJ-2026-1102", name: "Vikram Malhotra", age: 58, gender: "Male", bloodGroup: "A-", phone: "+91 91234 56789", admissionDate: "12-Jul-2026", status: "Critical", ward: "ICU West", bed: "ICU-02", primaryPhysician: "Dr. Priya Sen", condition: "Acute Myocardial Infarction", vitals: { hr: 94, bp: "145/95", temp: "99.1°F", spo2: "93%" }, notes: "Continuous ECG monitoring active. Administered thrombolytic agent. Vital metrics stabilized.", meds: ["Aspirin 75mg OD", "Clopidogrel 75mg OD", "Atorvastatin 40mg HS"] },
+            { id: "MJ-2026-4405", name: "Kabeer Siddiqui", age: 45, gender: "Male", bloodGroup: "B+", phone: "+91 98112 23344", admissionDate: "14-Jul-2026", status: "Observation", ward: "Emergency-B", bed: "ER-09", primaryPhysician: "Dr. Rajesh Iyer", condition: "Severe Dehydration & Gastroenteritis", vitals: { hr: 82, bp: "110/70", temp: "100.2°F", spo2: "97%" }, notes: "Administered 2L IV normal saline. Temperature spiked slightly. Lab tests pending.", meds: ["Ondansetron 4mg IV", "ORS Ad libitum"] },
+            { id: "MJ-2026-7819", name: "Meera Nair", age: 62, gender: "Female", bloodGroup: "AB+", phone: "+91 88990 11223", admissionDate: "13-Jul-2026", status: "Stable", ward: "Cardiac Care Unit", bed: "CCU-05", primaryPhysician: "Dr. Priya Sen", condition: "Congestive Heart Failure", vitals: { hr: 68, bp: "130/85", temp: "98.4°F", spo2: "96%" }, notes: "Fluid restriction 1.5L/day. Daily weight monitoring active.", meds: ["Furosemide 40mg OD", "Ramipril 2.5mg OD"] }
+        ];
+
+        const INITIAL_WARD_BEDS = {
+            "ICU West": [
+                { bed: "ICU-01", patient: "Rahul Saxena", status: "Critical" },
+                { bed: "ICU-02", patient: "Vikram Malhotra", status: "Critical" },
+                { bed: "ICU-03", patient: null, status: "Vacant" },
+                { bed: "ICU-04", patient: "Sanjay Gupta", status: "Critical" },
+                { bed: "ICU-05", patient: null, status: "Vacant" }
+            ],
+            "Cardiac CCU": [
+                { bed: "CCU-01", patient: "Rajesh Khanna", status: "Observation" },
+                { bed: "CCU-02", patient: null, status: "Vacant" },
+                { bed: "CCU-03", patient: null, status: "Vacant" },
+                { bed: "CCU-04", patient: "Arun Shourie", status: "Stable" },
+                { bed: "CCU-05", patient: "Meera Nair", status: "Stable" }
+            ],
+            "Emergency-B": [
+                { bed: "ER-01", patient: "Aditya Roy", status: "Emergency" },
+                { bed: "ER-02", patient: null, status: "Vacant" },
+                { bed: "ER-03", patient: "Tanvi Shah", status: "Emergency" },
+                { bed: "ER-09", patient: "Kabeer Siddiqui", status: "Observation" }
+            ]
+        };
+
+        const INITIAL_FINANCIALS = [
+            { id: "TXN-9021", patient: "Ananya Sharma", policyId: "HDFC-ERGO-12001", billAmount: 85200, claimedAmount: 75000, status: "Approved", date: "14-Jul-2026" },
+            { id: "TXN-9022", patient: "Vikram Malhotra", policyId: "NHA-PMJAY-90122", billAmount: 320000, claimedAmount: 280000, status: "Pending", date: "15-Jul-2026" },
+            { id: "TXN-9023", patient: "Meera Nair", policyId: "STAR-COMP-88301", billAmount: 110500, claimedAmount: 110500, status: "Disputed", date: "13-Jul-2026" },
+            { id: "TXN-9024", patient: "Rahul Saxena", policyId: "ICICI-LOMB-77211", billAmount: 420000, claimedAmount: 390000, status: "Approved", date: "11-Jul-2026" }
+        ];
+
+        function App() {
+            const [activeTab, setActiveTab] = useState('dashboard');
+            const [patients, setPatients] = useState(INITIAL_PATIENTS);
+            const [selectedPatient, setSelectedPatient] = useState(INITIAL_PATIENTS[0]);
+            const [wardBeds, setWardBeds] = useState(INITIAL_WARD_BEDS);
+            const [financials, setFinancials] = useState(INITIAL_FINANCIALS);
+            const [vitalAlert, setVitalAlert] = useState(null);
+            const [searchQuery, setSearchQuery] = useState('');
+            const [isPrescriptionModalOpen, setIsPrescriptionModalOpen] = useState(false);
+            const [newMed, setNewMed] = useState('');
+            const [systemLog, setSystemLog] = useState([
+                "System initialized securely under HIPAA compliance key HK-990-2026.",
+                "DB Mirroring active. Local failover latency is 1.2ms.",
+                "Realtime telemetry link active with ICU Ward B."
+            ]);
+
+            // Bed Allocator State
+            const [selectedBedToAssign, setSelectedBedToAssign] = useState(null);
+            const [assignPatientName, setAssignPatientName] = useState('');
+
+            // Chart References
+            const lineChartRef = useRef(null);
+            const doughnutChartRef = useRef(null);
+            let lineChartInst = useRef(null);
+            let doughnutChartInst = useRef(null);
+
+            // Simulation of Real-time telemetry monitoring updates
+            useEffect(() => {
+                const interval = setInterval(() => {
+                    setPatients(prev => prev.map(p => {
+                        if (p.id === "MJ-2026-1102") {
+                            const newHr = Math.floor(Math.random() * (108 - 88) + 88);
+                            if (newHr > 100 && !vitalAlert) {
+                                setVitalAlert({
+                                    patient: "Vikram Malhotra",
+                                    metric: "Heart Rate",
+                                    value: `${newHr} bpm`,
+                                    level: "Critical"
+                                });
+                                setSystemLog(log => [`[${new Date().toLocaleTimeString()}] CRITICAL: Vikram Malhotra Heart Rate spiked to ${newHr} bpm`, ...log]);
+                            }
+                            return { ...p, vitals: { ...p.vitals, hr: newHr } };
+                        }
+                        return p;
+                    }));
+                }, 4000);
+                return () => clearInterval(interval);
+            }, [vitalAlert]);
+
+            // Render Charts
+            useEffect(() => {
+                if (activeTab === 'dashboard') {
+                    if (lineChartRef.current) {
+                        if (lineChartInst.current) lineChartInst.current.destroy();
+                        lineChartInst.current = new Chart(lineChartRef.current, {
+                            type: 'line',
+                            data: {
+                                labels: ['09-Jul', '10-Jul', '11-Jul', '12-Jul', '13-Jul', '14-Jul', '15-Jul'],
+                                datasets: [{
+                                    label: 'Daily Admissions',
+                                    data: [28, 41, 35, 54, 48, 62, 70],
+                                    borderColor: '#0ea5e9',
+                                    backgroundColor: 'rgba(14, 165, 233, 0.15)',
+                                    fill: true,
+                                    tension: 0.4
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: { legend: { display: false } },
+                                scales: {
+                                    y: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8' } },
+                                    x: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8' } }
+                                }
+                            }
+                        });
+                    }
+
+                    if (doughnutChartRef.current) {
+                        if (doughnutChartInst.current) doughnutChartInst.current.destroy();
+                        doughnutChartInst.current = new Chart(doughnutChartRef.current, {
+                            type: 'doughnut',
+                            data: {
+                                labels: ['ICU', 'CCU', 'General Ward', 'Emergency'],
+                                datasets: [{
+                                    data: [15, 10, 45, 30],
+                                    backgroundColor: ['#f43f5e', '#a855f7', '#10b981', '#f59e0b'],
+                                    borderWidth: 0
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: { legend: { position: 'right', labels: { color: '#94a3b8' } } }
+                            }
+                        });
+                    }
+                }
+            }, [activeTab]);
+
+            const logAction = (action) => {
+                const timestamp = new Date().toLocaleTimeString();
+                setSystemLog(prev => [`[${timestamp}] ${action}`, ...prev]);
+            };
+
+            const resolveAlert = () => {
+                logAction(`Alert for ${vitalAlert.patient} marked as resolved by clinical staff.`);
+                setVitalAlert(null);
+            };
+
+            const addPrescription = () => {
+                if (newMed.trim() === '') return;
+                setPatients(prev => prev.map(p => {
+                    if (p.id === selectedPatient.id) {
+                        const updatedMeds = [...p.meds, newMed];
+                        const updated = { ...p, meds: updatedMeds };
+                        setSelectedPatient(updated);
+                        logAction(`Prescription updated for ${p.name}: Added ${newMed}`);
+                        return updated;
+                    }
+                    return p;
+                }));
+                setNewMed('');
+                setIsPrescriptionModalOpen(false);
+            };
+
+            const deleteMed = (medIndex) => {
+                setPatients(prev => prev.map(p => {
+                    if (p.id === selectedPatient.id) {
+                        const updatedMeds = p.meds.filter((_, idx) => idx !== medIndex);
+                        const updated = { ...p, meds: updatedMeds };
+                        setSelectedPatient(updated);
+                        logAction(`Prescription updated for ${p.name}: Removed medication`);
+                        return updated;
+                    }
+                    return p;
+                }));
+            };
+
+            // Bed Grid Actions
+            const dischargeBed = (ward, index) => {
+                const bedList = [...wardBeds[ward]];
+                const patientName = bedList[index].patient;
+                bedList[index] = { ...bedList[index], patient: null, status: 'Vacant' };
+                setWardBeds({ ...wardBeds, [ward]: bedList });
+                logAction(`Discharged patient ${patientName} from Bed ${bedList[index].bed} in ${ward}.`);
+            };
+
+            const allocateBed = () => {
+                if (!assignPatientName.trim()) return;
+                const { ward, index } = selectedBedToAssign;
+                const bedList = [...wardBeds[ward]];
+                bedList[index] = { ...bedList[index], patient: assignPatientName, status: 'Observation' };
+                setWardBeds({ ...wardBeds, [ward]: bedList });
+                logAction(`Assigned Bed ${bedList[index].bed} in ${ward} to patient ${assignPatientName}.`);
+                setSelectedBedToAssign(null);
+                setAssignPatientName('');
+            };
+
+            // Financial Actions
+            const updateClaimStatus = (id, newStatus) => {
+                setFinancials(prev => prev.map(f => {
+                    if (f.id === id) {
+                        logAction(`Claim Status updated for ${f.patient} (ID: ${id}) to ${newStatus}.`);
+                        return { ...f, status: newStatus };
+                    }
+                    return f;
+                }));
+            };
+
+            const filteredPatients = patients.filter(p => 
+                p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                p.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                p.condition.toLowerCase().includes(searchQuery.toLowerCase())
+            );
+
+            return (
+                <div class="flex h-screen overflow-hidden">
+                    {/* Sidebar / Left Navigation */}
+                    <aside class="w-72 bg-slate-900 border-r border-slate-800 flex flex-col justify-between">
+                        <div>
+                            {/* Brand Header */}
+                            <div class="p-6 border-b border-slate-800 flex items-center space-x-3">
+                                <div class="p-2.5 bg-sky-500/10 rounded-xl text-sky-500 border border-sky-500/20">
+                                    <Icon name="Activity" className="w-6 h-6" />
+                                </div>
+                                <div>
+                                    <span class="text-xl font-bold tracking-tight text-white block">MyJeevan</span>
+                                    <span class="text-xs text-slate-400 font-mono tracking-widest uppercase">Health Command</span>
+                                </div>
+                            </div>
+
+                            <div class="px-6 py-4 bg-slate-950 border-b border-slate-900/50">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-mono text-emerald-500 flex items-center">
+                                        <span class="w-2 h-2 bg-emerald-500 rounded-full animate-ping mr-2"></span>
+                                        SECURE CONSOLE
+                                    </span>
+                                    <span class="text-xs font-mono text-slate-500">v4.12-PRO</span>
+                                </div>
+                            </div>
+
+                            {/* Navigation Links */}
+                            <nav class="p-4 space-y-1">
+                                <button 
+                                    onClick={() => { setActiveTab('dashboard'); logAction("Navigated to Master Dashboard"); }} 
+                                    class={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition font-medium ${activeTab === 'dashboard' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+                                >
+                                    <Icon name="LayoutDashboard" />
+                                    <span>Master Analytics</span>
+                                </button>
+                                <button 
+                                    onClick={() => { setActiveTab('emr'); logAction("Opened Patient Registry & EMR Console"); }} 
+                                    class={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition font-medium ${activeTab === 'emr' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+                                >
+                                    <Icon name="FolderGit" />
+                                    <span>EMR Registry</span>
+                                </button>
+                                <button 
+                                    onClick={() => { setActiveTab('wards'); logAction("Accessed Ward Management Grid"); }} 
+                                    class={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition font-medium ${activeTab === 'wards' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+                                >
+                                    <Icon name="BedDouble" />
+                                    <span>Ward Admissions</span>
+                                </button>
+                                <button 
+                                    onClick={() => { setActiveTab('billing'); logAction("Navigated to Billing & Insurance Panel"); }} 
+                                    class={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition font-medium ${activeTab === 'billing' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+                                >
+                                    <Icon name="ReceiptText" />
+                                    <span>Billing & Insurance</span>
+                                </button>
+                            </nav>
+                        </div>
+
+                        {/* System Health Indicators */}
+                        <div class="p-6 bg-slate-950/80 border-t border-slate-800/80">
+                            <span class="text-xs font-semibold text-slate-400 block mb-2">TELEMETRY LINK STATUS</span>
+                            <div class="space-y-2 font-mono text-[10px] text-slate-500">
+                                <div class="flex justify-between">
+                                    <span>EMR DB MIRROR:</span>
+                                    <span class="text-emerald-500">STABLE</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>SSL ENCRYPTION:</span>
+                                    <span class="text-emerald-500">AES-256</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>HL7 API FEED:</span>
+                                    <span class="text-emerald-500">CONNECTED</span>
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
+
+                    {/* Main Workspace */}
+                    <main class="flex-grow flex flex-col overflow-hidden bg-slate-950">
+                        {vitalAlert && (
+                            <div class="bg-rose-950/80 border-b border-rose-500/40 px-6 py-3 flex items-center justify-between text-rose-200 animate-pulse">
+                                <div class="flex items-center space-x-3">
+                                    <Icon name="ShieldAlert" className="text-rose-500 w-5 h-5" />
+                                    <span class="text-sm">
+                                        <strong class="font-bold">TELEMETRY WARNING:</strong> Patient <span class="underline">{vitalAlert.patient}</span> telemetry exhibits anomalous <strong>{vitalAlert.metric}</strong> reading of <span class="text-white font-mono bg-rose-900 px-2 py-0.5 rounded">{vitalAlert.value}</span>.
+                                    </span>
+                                </div>
+                                <button onClick={resolveAlert} class="bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold px-3 py-1 rounded transition">
+                                    Ack & Silence
+                                </button>
+                            </div>
+                        )}
+
+                        <header class="h-20 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-8 z-10">
+                            <div>
+                                <h1 class="text-2xl font-extrabold text-white tracking-tight">Clinical Console</h1>
+                                <p class="text-xs text-slate-400 font-mono">MyJeevan Health • Main Campus Control • Live Telemetry Active</p>
+                            </div>
+                            <div class="flex items-center space-x-4">
+                                <div class="bg-slate-800/80 border border-slate-700/50 rounded-xl px-4 py-2 flex items-center space-x-3">
+                                    <span class="relative flex h-3.5 w-3.5">
+                                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                        <span class="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500"></span>
+                                    </span>
+                                    <span class="text-sm font-semibold text-slate-300">Live Server Mirror</span>
+                                </div>
+                            </div>
+                        </header>
+
+                        <div class="flex-grow overflow-y-auto p-8">
+                            
+                            {/* TAB: Master Analytics */}
+                            {activeTab === 'dashboard' && (
+                                <div class="space-y-8">
+                                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                        <div class="bg-slate-900 border border-slate-800/80 rounded-2xl p-6 relative">
+                                            <div class="flex justify-between items-start">
+                                                <div>
+                                                    <span class="text-xs font-mono text-slate-400 block tracking-wider uppercase">Active In-patients</span>
+                                                    <span class="text-4xl font-extrabold text-white mt-2 block">{patients.length + 138}</span>
+                                                </div>
+                                                <div class="p-3 bg-sky-500/10 text-sky-400 rounded-xl border border-sky-500/20">
+                                                    <Icon name="Users" />
+                                                </div>
+                                            </div>
+                                            <div class="mt-4 flex items-center text-xs text-emerald-400 font-medium">
+                                                <Icon name="TrendingUp" className="w-4 h-4 mr-1" />
+                                                <span>+12% vs last month</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="bg-slate-900 border border-slate-800/80 rounded-2xl p-6 relative">
+                                            <div class="flex justify-between items-start">
+                                                <div>
+                                                    <span class="text-xs font-mono text-slate-400 block tracking-wider uppercase">Critical Admissions</span>
+                                                    <span class="text-4xl font-extrabold text-rose-500 mt-2 block">{vitalAlert ? 9 : 8}</span>
+                                                </div>
+                                                <div class="p-3 bg-rose-500/10 text-rose-400 rounded-xl border border-rose-500/20">
+                                                    <Icon name="Activity" />
+                                                </div>
+                                            </div>
+                                            <div class="mt-4 flex items-center text-xs text-rose-400 font-medium">
+                                                <Icon name="AlertTriangle" className="w-4 h-4 mr-1" />
+                                                <span>Telemetry Warnings Monitor Active</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="bg-slate-900 border border-slate-800/80 rounded-2xl p-6 relative">
+                                            <div class="flex justify-between items-start">
+                                                <div>
+                                                    <span class="text-xs font-mono text-slate-400 block tracking-wider uppercase">ICU Bed Occupancy</span>
+                                                    <span class="text-4xl font-extrabold text-emerald-400 mt-2 block">88.4%</span>
+                                                </div>
+                                                <div class="p-3 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20">
+                                                    <Icon name="Bed" />
+                                                </div>
+                                            </div>
+                                            <div class="mt-4 flex items-center text-xs text-emerald-400 font-medium">
+                                                <span>12 beds currently available</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="bg-slate-900 border border-slate-800/80 rounded-2xl p-6 relative">
+                                            <div class="flex justify-between items-start">
+                                                <div>
+                                                    <span class="text-xs font-mono text-slate-400 block tracking-wider uppercase">Claims Pending Approval</span>
+                                                    <span class="text-4xl font-extrabold text-amber-500 mt-2 block">₹ 9.15 L</span>
+                                                </div>
+                                                <div class="p-3 bg-amber-500/10 text-amber-400 rounded-xl border border-amber-500/20">
+                                                    <Icon name="ShieldCheck" />
+                                                </div>
+                                            </div>
+                                            <div class="mt-4 flex items-center text-xs text-amber-400 font-medium">
+                                                <span>{financials.filter(f => f.status === 'Pending').length} corporate policies under review</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Operational Analytics Charts */}
+                                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                        <div class="lg:col-span-2 bg-slate-900 border border-slate-800/80 rounded-2xl p-6">
+                                            <div class="flex items-center justify-between mb-6">
+                                                <div>
+                                                    <h3 class="text-lg font-extrabold text-white">Daily Admission Load Profile</h3>
+                                                    <p class="text-xs text-slate-400">Total hospital admissions tracked dynamically</p>
+                                                </div>
+                                                <span class="text-xs font-mono bg-slate-800 px-3 py-1 rounded text-slate-300 border border-slate-700/50">LIVE REFRESH</span>
+                                            </div>
+                                            <div class="h-72">
+                                                <canvas ref={lineChartRef}></canvas>
+                                            </div>
+                                        </div>
+
+                                        <div class="bg-slate-900 border border-slate-800/80 rounded-2xl p-6">
+                                            <div class="flex items-center justify-between mb-6">
+                                                <div>
+                                                    <h3 class="text-lg font-extrabold text-white">Ward Allocation Profile</h3>
+                                                    <p class="text-xs text-slate-400">Resource distribution index</p>
+                                                </div>
+                                            </div>
+                                            <div class="h-72 flex items-center justify-center">
+                                                <canvas ref={doughnutChartRef}></canvas>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* TAB: EMR Registry */}
+                            {activeTab === 'emr' && (
+                                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 h-[calc(100vh-220px)] overflow-hidden">
+                                    {/* Patients List Directory */}
+                                    <div class="bg-slate-900 border border-slate-800 rounded-2xl flex flex-col overflow-hidden">
+                                        <div class="p-6 border-b border-slate-800">
+                                            <h3 class="text-lg font-bold text-white mb-4">Patient Registry</h3>
+                                            <div class="relative">
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="Search Patient Name, ID or Symptom..." 
+                                                    value={searchQuery}
+                                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                                    class="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 pl-10 pr-4 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition"
+                                                />
+                                                <div class="absolute left-3.5 top-3.5 text-slate-500">
+                                                    <Icon name="Search" className="w-4 h-4" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="flex-grow overflow-y-auto p-4 space-y-3">
+                                            {filteredPatients.map(p => (
+                                                <div 
+                                                    key={p.id}
+                                                    onClick={() => setSelectedPatient(p)}
+                                                    class={`p-4 rounded-xl cursor-pointer border transition ${selectedPatient.id === p.id ? 'bg-sky-500/10 border-sky-500/40 text-white' : 'bg-slate-950/50 border-slate-800/60 text-slate-300 hover:bg-slate-800/35'}`}
+                                                >
+                                                    <div class="flex justify-between items-start">
+                                                        <h4 class="font-bold text-sm">{p.name}</h4>
+                                                        <span class={`text-[10px] px-2 py-0.5 rounded font-mono ${p.status === 'Critical' ? 'bg-rose-500/10 text-rose-400' : p.status === 'Observation' ? 'bg-amber-500/10 text-amber-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                                                            {p.status}
+                                                        </span>
+                                                    </div>
+                                                    <div class="flex justify-between items-center mt-2 text-xs text-slate-400">
+                                                        <span>{p.gender}, {p.age} Yrs</span>
+                                                        <span class="font-mono text-[10px]">{p.id}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Patient Electronic Health Record Details */}
+                                    <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col overflow-y-auto p-8 space-y-6">
+                                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center pb-6 border-b border-slate-800/80">
+                                            <div>
+                                                <span class="text-xs font-mono text-sky-500 uppercase tracking-widest">{selectedPatient.id}</span>
+                                                <h2 class="text-2xl font-bold text-white mt-1">{selectedPatient.name}</h2>
+                                                <p class="text-sm text-slate-400 mt-1">Diagnosis: <strong class="text-slate-200">{selectedPatient.condition}</strong></p>
+                                            </div>
+                                            <div class="mt-4 md:mt-0 flex gap-3">
+                                                <button onClick={() => setIsPrescriptionModalOpen(true)} class="bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition flex items-center space-x-2">
+                                                    <Icon name="Plus" className="w-4 h-4" />
+                                                    <span>Add Medication</span>
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Vitals Grid */}
+                                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800/80">
+                                                <span class="text-xs text-slate-400">Heart Rate</span>
+                                                <div class="text-xl font-bold text-white mt-1 flex items-center space-x-2">
+                                                    <Icon name="Heart" className="text-rose-500 w-5 h-5" />
+                                                    <span>{selectedPatient.vitals.hr} bpm</span>
+                                                </div>
+                                            </div>
+                                            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800/80">
+                                                <span class="text-xs text-slate-400">Blood Pressure</span>
+                                                <div class="text-xl font-bold text-white mt-1 flex items-center space-x-2">
+                                                    <Icon name="ShieldAlert" className="text-sky-500 w-5 h-5" />
+                                                    <span>{selectedPatient.vitals.bp}</span>
+                                                </div>
+                                            </div>
+                                            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800/80">
+                                                <span class="text-xs text-slate-400">SPO2 Status</span>
+                                                <div class="text-xl font-bold text-emerald-400 mt-1 flex items-center space-x-2">
+                                                    <Icon name="Activity" className="text-emerald-500 w-5 h-5" />
+                                                    <span>{selectedPatient.vitals.spo2}</span>
+                                                </div>
+                                            </div>
+                                            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800/80">
+                                                <span class="text-xs text-slate-400">Temperature</span>
+                                                <div class="text-xl font-bold text-white mt-1 flex items-center space-x-2">
+                                                    <Icon name="Thermometer" className="text-amber-500 w-5 h-5" />
+                                                    <span>{selectedPatient.vitals.temp}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Clinical Dossier details */}
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div class="space-y-4">
+                                                <h4 class="text-sm font-semibold tracking-wider uppercase text-slate-400 border-b border-slate-800 pb-2">Active Prescriptions</h4>
+                                                <div class="space-y-2">
+                                                    {selectedPatient.meds.length === 0 ? (
+                                                        <p class="text-xs text-slate-500 font-mono">No Active Medications</p>
+                                                    ) : (
+                                                        selectedPatient.meds.map((med, index) => (
+                                                            <div key={index} class="flex items-center justify-between p-3 bg-slate-950/80 border border-slate-800/60 rounded-xl text-sm">
+                                                                <span class="font-mono text-slate-200">{med}</span>
+                                                                <button onClick={() => deleteMed(index)} class="text-rose-500 hover:text-rose-400 transition p-1">
+                                                                    <Icon name="Trash2" className="w-4 h-4" />
+                                                                </button>
+                                                            </div>
+                                                        ))
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div class="space-y-4">
+                                                <h4 class="text-sm font-semibold tracking-wider uppercase text-slate-400 border-b border-slate-800 pb-2">Clinical Notes</h4>
+                                                <div class="p-4 bg-slate-950 border border-slate-800/80 rounded-xl text-xs text-slate-300 leading-relaxed font-mono">
+                                                    {selectedPatient.notes}
+                                                </div>
+                                                <div class="grid grid-cols-2 gap-4 text-xs font-mono text-slate-400 bg-slate-950/40 p-3 rounded-lg border border-slate-800/50">
+                                                    <div>Ward: <span class="text-white">{selectedPatient.ward}</span></div>
+                                                    <div>Bed: <span class="text-white">{selectedPatient.bed}</span></div>
+                                                    <div class="col-span-2">Consultant: <span class="text-sky-400 font-semibold">{selectedPatient.primaryPhysician}</span></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* TAB: Ward Admissions */}
+                            {activeTab === 'wards' && (
+                                <div class="space-y-8">
+                                    <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+                                        <div>
+                                            <h2 class="text-xl font-bold text-white">Live Ward Status Grid</h2>
+                                            <p class="text-xs text-slate-400 mt-1">Live Occupancy profile of special telemetry care and standard ICU modules.</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
+                                        {Object.keys(wardBeds).map((wardName) => (
+                                            <div key={wardName} class="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col space-y-4">
+                                                <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                                                    <h3 class="font-extrabold text-white">{wardName}</h3>
+                                                    <span class="text-xs font-mono bg-slate-950 px-2.5 py-1 rounded-md text-emerald-400 border border-slate-800">
+                                                        {wardBeds[wardName].filter(b => b.patient).length} / {wardBeds[wardName].length} BEDS OCCUPIED
+                                                    </span>
+                                                </div>
+
+                                                <div class="space-y-3">
+                                                    {wardBeds[wardName].map((bedObj, index) => (
+                                                        <div key={index} class="p-4 bg-slate-950 border border-slate-800/80 rounded-xl flex items-center justify-between">
+                                                            <div class="flex items-center space-x-3">
+                                                                <div class={`p-2 rounded-lg ${bedObj.patient ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+                                                                    <Icon name="Bed" className="w-5 h-5" />
+                                                                </div>
+                                                                <div>
+                                                                    <span class="text-xs font-mono font-semibold text-slate-400 block">{bedObj.bed}</span>
+                                                                    <span class="text-sm font-bold text-white mt-0.5">
+                                                                        {bedObj.patient ? bedObj.patient : <span class="text-slate-500 font-normal">Available</span>}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                            <div>
+                                                                {bedObj.patient ? (
+                                                                    <button 
+                                                                        onClick={() => dischargeBed(wardName, index)}
+                                                                        class="text-xs bg-rose-950/60 hover:bg-rose-900/60 text-rose-300 border border-rose-800/40 px-3 py-1.5 rounded-lg transition"
+                                                                    >
+                                                                        Discharge
+                                                                    </button>
+                                                                ) : (
+                                                                    <button 
+                                                                        onClick={() => setSelectedBedToAssign({ ward: wardName, index })}
+                                                                        class="text-xs bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-800/40 px-3 py-1.5 rounded-lg transition"
+                                                                    >
+                                                                        Assign
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* TAB: Billing & Claims Panel */}
+                            {activeTab === 'billing' && (
+                                <div class="space-y-8">
+                                    <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+                                        <div>
+                                            <h2 class="text-xl font-bold text-white">Billing & Insurance Telemetry</h2>
+                                            <p class="text-xs text-slate-400 mt-1">Realtime audit, claim status, and transaction validation pipeline.</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Financial Dashboard Cards */}
+                                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+                                            <span class="text-xs font-mono text-slate-400">TOTAL INVOICED REVENUE</span>
+                                            <div class="text-2xl font-extrabold text-white mt-2">
+                                                ₹ {financials.reduce((sum, current) => sum + current.billAmount, 0).toLocaleString('en-IN')}
+                                            </div>
+                                        </div>
+                                        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+                                            <span class="text-xs font-mono text-emerald-400">APPROVED INSURANCE CLAIMS</span>
+                                            <div class="text-2xl font-extrabold text-emerald-400 mt-2">
+                                                ₹ {financials.filter(f => f.status === 'Approved').reduce((sum, current) => sum + current.claimedAmount, 0).toLocaleString('en-IN')}
+                                            </div>
+                                        </div>
+                                        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+                                            <span class="text-xs font-mono text-amber-500">PENDING & DISPUTED AUDITS</span>
+                                            <div class="text-2xl font-extrabold text-amber-500 mt-2">
+                                                ₹ {financials.filter(f => f.status !== 'Approved').reduce((sum, current) => sum + current.claimedAmount, 0).toLocaleString('en-IN')}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Claims Datatable */}
+                                    <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                                        <div class="p-6 border-b border-slate-800 flex justify-between items-center">
+                                            <h3 class="font-extrabold text-white">Claims Audit Registry</h3>
+                                            <span class="text-xs font-mono text-slate-400">COMPLIANCE PROTOCOL IRDA-v26</span>
+                                        </div>
+                                        <div class="overflow-x-auto">
+                                            <table class="w-full text-left text-sm text-slate-300">
+                                                <thead class="bg-slate-950 text-slate-400 uppercase text-[10px] tracking-widest font-mono">
+                                                    <tr>
+                                                        <th class="p-4 pl-6">TXN ID</th>
+                                                        <th class="p-4">Patient</th>
+                                                        <th class="p-4">Insurance Policy Key</th>
+                                                        <th class="p-4 text-right">Invoiced (₹)</th>
+                                                        <th class="p-4 text-right">Claim Cover (₹)</th>
+                                                        <th class="p-4 text-center">Status</th>
+                                                        <th class="p-4 text-center">Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody class="divide-y divide-slate-800/60 font-mono">
+                                                    {financials.map((txn) => (
+                                                        <tr key={txn.id} class="hover:bg-slate-800/20">
+                                                            <td class="p-4 pl-6 font-semibold text-slate-400">{txn.id}</td>
+                                                            <td class="p-4 text-white font-sans font-medium">{txn.patient}</td>
+                                                            <td class="p-4 text-slate-400">{txn.policyId}</td>
+                                                            <td class="p-4 text-right text-white font-semibold">₹ {txn.billAmount.toLocaleString('en-IN')}</td>
+                                                            <td class="p-4 text-right text-emerald-400 font-semibold">₹ {txn.claimedAmount.toLocaleString('en-IN')}</td>
+                                                            <td class="p-4 text-center">
+                                                                <span class={`text-[10px] px-2.5 py-1 rounded font-bold uppercase tracking-wider ${txn.status === 'Approved' ? 'bg-emerald-500/10 text-emerald-400' : txn.status === 'Pending' ? 'bg-amber-500/10 text-amber-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                                                                    {txn.status}
+                                                                </span>
+                                                            </td>
+                                                            <td class="p-4 text-center flex items-center justify-center space-x-2">
+                                                                {txn.status !== 'Approved' && (
+                                                                    <button 
+                                                                        onClick={() => updateClaimStatus(txn.id, 'Approved')}
+                                                                        class="px-2.5 py-1 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 text-xs rounded border border-emerald-800/40 transition"
+                                                                    >
+                                                                        Approve
+                                                                    </button>
+                                                                )}
+                                                                {txn.status === 'Pending' && (
+                                                                    <button 
+                                                                        onClick={() => updateClaimStatus(txn.id, 'Disputed')}
+                                                                        class="px-2.5 py-1 bg-rose-950 hover:bg-rose-900 text-rose-300 text-xs rounded border border-rose-800/40 transition"
+                                                                    >
+                                                                        Dispute
+                                                                    </button>
+                                                                )}
+                                                                {txn.status === 'Approved' && (
+                                                                    <span class="text-xs text-slate-500 italic">No Action Needed</span>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                        </div>
+
+                        {/* Live Log Terminal Area (Always Visible at bottom) */}
+                        <div class="h-44 border-t border-slate-800 bg-slate-900/80 flex flex-col justify-between overflow-hidden">
+                            <div class="p-4 border-b border-slate-800 bg-slate-950 flex items-center justify-between text-xs font-mono">
+                                <span class="text-slate-400 flex items-center">
+                                    <span class="w-2 h-2 bg-sky-500 rounded-full animate-ping mr-2"></span>
+                                    ENTERPRISE SYSTEM DIAGNOSTIC OUTPUT (REAL-TIME CONTEXT)
+                                </span>
+                                <span class="text-slate-500">PORT: SSL-1104</span>
+                            </div>
+                            <div class="flex-grow overflow-y-auto p-4 space-y-1 font-mono text-[11px] text-emerald-500/90 select-text">
+                                {systemLog.map((log, idx) => (
+                                    <div key={idx} class="leading-relaxed">
+                                        <span class="text-emerald-700">&gt;&gt;</span> {log}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            );
+        }
+
+        // --- PRESCRIPTION MODAL MODULATOR ---
+        const ModalPrescription = ({ isOpen, onClose, onSave, newMed, setNewMed }) => {
+            if (!isOpen) return null;
+            return (
+                <div class="fixed inset-0 bg-slate-950/90 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div class="bg-slate-900 border border-slate-850 rounded-2xl w-full max-w-md p-6">
+                        <h3 class="text-lg font-bold text-white mb-3">Authorize New Drug Entry</h3>
+                        <p class="text-xs text-slate-400 mb-4">Input correct prescription layout under strict medical guidelines.</p>
+                        <input 
+                            type="text" 
+                            placeholder="e.g. Atorvastatin 20mg OD HS"
+                            value={newMed}
+                            onChange={(e) => setNewMed(e.target.value)}
+                            class="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 transition mb-4"
+                        />
+                        <div class="flex justify-end space-x-3">
+                            <button onClick={onClose} class="text-xs text-slate-400 hover:text-white px-4 py-2 transition">Cancel</button>
+                            <button onClick={onSave} class="text-xs bg-sky-600 hover:bg-sky-500 text-white font-semibold px-4 py-2 rounded-lg transition">Authorize & Save</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- BED ASSIGNER PANEL ---
+        const BedAssignerModal = ({ activeBed, onClose, onAssign, patientName, setPatientName }) => {
+            if (!activeBed) return null;
+            return (
+                <div class="fixed inset-0 bg-slate-950/90 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div class="bg-slate-900 border border-slate-850 rounded-2xl w-full max-w-md p-6">
+                        <h3 class="text-lg font-bold text-white mb-1">Allocate Bed {activeBed.bed}</h3>
+                        <p class="text-xs text-slate-400 mb-4 font-mono uppercase tracking-wider">{activeBed.ward}</p>
+                        <input 
+                            type="text" 
+                            placeholder="Input Patient Name for admission..."
+                            value={patientName}
+                            onChange={(e) => setPatientName(e.target.value)}
+                            class="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 transition mb-4"
+                        />
+                        <div class="flex justify-end space-x-3">
+                            <button onClick={onClose} class="text-xs text-slate-400 hover:text-white px-4 py-2 transition">Cancel</button>
+                            <button onClick={onAssign} class="text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-4 py-2 rounded-lg transition">Assign Bed</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Main App Container Wrapper with Modals Injector
+        function AppWrapper() {
+            return (
+                <AppContent />
+            );
+        }
+
+        // Internal Content to inject Modals seamlessly
+        function AppContent() {
+            const [activeTab, setActiveTab] = useState('dashboard');
+            const [patients, setPatients] = useState(INITIAL_PATIENTS);
+            const [selectedPatient, setSelectedPatient] = useState(INITIAL_PATIENTS[0]);
+            const [wardBeds, setWardBeds] = useState(INITIAL_WARD_BEDS);
+            const [financials, setFinancials] = useState(INITIAL_FINANCIALS);
+            const [vitalAlert, setVitalAlert] = useState(null);
+            const [searchQuery, setSearchQuery] = useState('');
+            const [isPrescriptionModalOpen, setIsPrescriptionModalOpen] = useState(false);
+            const [newMed, setNewMed] = useState('');
+            const [systemLog, setSystemLog] = useState([
+                "System initialized securely under HIPAA compliance key HK-990-2026.",
+                "DB Mirroring active. Local failover latency is 1.2ms.",
+                "Realtime telemetry link active with ICU Ward B."
+            ]);
+
+            // Bed Allocator State
+            const [selectedBedToAssign, setSelectedBedToAssign] = useState(null);
+            const [assignPatientName, setAssignPatientName] = useState('');
+
+            // Chart References
+            const lineChartRef = useRef(null);
+            const doughnutChartRef = useRef(null);
+            let lineChartInst = useRef(null);
+            let doughnutChartInst = useRef(null);
+
+            // Simulation of Real-time telemetry monitoring updates
+            useEffect(() => {
+                const interval = setInterval(() => {
+                    setPatients(prev => prev.map(p => {
+                        if (p.id === "MJ-2026-1102") {
+                            const newHr = Math.floor(Math.random() * (108 - 88) + 88);
+                            if (newHr > 100 && !vitalAlert) {
+                                setVitalAlert({
+                                    patient: "Vikram Malhotra",
+                                    metric: "Heart Rate",
+                                    value: `${newHr} bpm`,
+                                    level: "Critical"
+                                });
+                                setSystemLog(log => [`[${new Date().toLocaleTimeString()}] CRITICAL: Vikram Malhotra Heart Rate spiked to ${newHr} bpm`, ...log]);
+                            }
+                            return { ...p, vitals: { ...p.vitals, hr: newHr } };
+                        }
+                        return p;
+                    }));
+                }, 4000);
+                return () => clearInterval(interval);
+            }, [vitalAlert]);
+
+            // Render Analytical Charts
+            useEffect(() => {
+                if (activeTab === 'dashboard') {
+                    if (lineChartRef.current) {
+                        if (lineChartInst.current) lineChartInst.current.destroy();
+                        lineChartInst.current = new Chart(lineChartRef.current, {
+                            type: 'line',
+                            data: {
+                                labels: ['09-Jul', '10-Jul', '11-Jul', '12-Jul', '13-Jul', '14-Jul', '15-Jul'],
+                                datasets: [{
+                                    label: 'Daily Admissions',
+                                    data: [28, 41, 35, 54, 48, 62, 70],
+                                    borderColor: '#0ea5e9',
+                                    backgroundColor: 'rgba(14, 165, 233, 0.15)',
+                                    fill: true,
+                                    tension: 0.4
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: { legend: { display: false } },
+                                scales: {
+                                    y: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8' } },
+                                    x: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8' } }
+                                }
+                            }
+                        });
+                    }
+
+                    if (doughnutChartRef.current) {
+                        if (doughnutChartInst.current) doughnutChartInst.current.destroy();
+                        doughnutChartInst.current = new Chart(doughnutChartRef.current, {
+                            type: 'doughnut',
+                            data: {
+                                labels: ['ICU', 'CCU', 'General Ward', 'Emergency'],
+                                datasets: [{
+                                    data: [15, 10, 45, 30],
+                                    backgroundColor: ['#f43f5e', '#a855f7', '#10b981', '#f59e0b'],
+                                    borderWidth: 0
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: { legend: { position: 'right', labels: { color: '#94a3b8' } } }
+                            }
+                        });
+                    }
+                }
+            }, [activeTab]);
+
+            const logAction = (action) => {
+                const timestamp = new Date().toLocaleTimeString();
+                setSystemLog(prev => [`[${timestamp}] ${action}`, ...prev]);
+            };
+
+            const resolveAlert = () => {
+                logAction(`Alert for ${vitalAlert.patient} marked as resolved by clinical staff.`);
+                setVitalAlert(null);
+            };
+
+            const addPrescription = () => {
+                if (newMed.trim() === '') return;
+                setPatients(prev => prev.map(p => {
+                    if (p.id === selectedPatient.id) {
+                        const updatedMeds = [...p.meds, newMed];
+                        const updated = { ...p, meds: updatedMeds };
+                        setSelectedPatient(updated);
+                        logAction(`Prescription updated for ${p.name}: Added ${newMed}`);
+                        return updated;
+                    }
+                    return p;
+                }));
+                setNewMed('');
+                setIsPrescriptionModalOpen(false);
+            };
+
+            const deleteMed = (medIndex) => {
+                setPatients(prev => prev.map(p => {
+                    if (p.id === selectedPatient.id) {
+                        const updatedMeds = p.meds.filter((_, idx) => idx !== medIndex);
+                        const updated = { ...p, meds: updatedMeds };
+                        setSelectedPatient(updated);
+                        logAction(`Prescription updated for ${p.name}: Removed medication`);
+                        return updated;
+                    }
+                    return p;
+                }));
+            };
+
+            // Bed Grid Actions
+            const dischargeBed = (ward, index) => {
+                const bedList = [...wardBeds[ward]];
+                const patientName = bedList[index].patient;
+                const targetBed = bedList[index].bed;
+                bedList[index] = { ...bedList[index], patient: null, status: 'Vacant' };
+                setWardBeds({ ...wardBeds, [ward]: bedList });
+                logAction(`Discharged patient ${patientName} from Bed ${targetBed} in ${ward}.`);
+            };
+
+            const allocateBed = () => {
+                if (!assignPatientName.trim()) return;
+                const { ward, index } = selectedBedToAssign;
+                const bedList = [...wardBeds[ward]];
+                bedList[index] = { ...bedList[index], patient: assignPatientName, status: 'Observation' };
+                setWardBeds({ ...wardBeds, [ward]: bedList });
+                logAction(`Assigned Bed ${bedList[index].bed} in ${ward} to patient ${assignPatientName}.`);
+                setSelectedBedToAssign(null);
+                setAssignPatientName('');
+            };
+
+            // Financial Actions
+            const updateClaimStatus = (id, newStatus) => {
+                setFinancials(prev => prev.map(f => {
+                    if (f.id === id) {
+                        logAction(`Claim Status updated for ${f.patient} (ID: ${id}) to ${newStatus}.`);
+                        return { ...f, status: newStatus };
+                    }
+                    return f;
+                }));
+            };
+
+            const filteredPatients = patients.filter(p => 
+                p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                p.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                p.condition.toLowerCase().includes(searchQuery.toLowerCase())
+            );
+
+            return (
+                <div class="flex h-screen overflow-hidden">
+                    {/* Sidebar / Left Navigation */}
+                    <aside class="w-72 bg-slate-900 border-r border-slate-800 flex flex-col justify-between">
+                        <div>
+                            {/* Brand Header */}
+                            <div class="p-6 border-b border-slate-800 flex items-center space-x-3">
+                                <div class="p-2.5 bg-sky-500/10 rounded-xl text-sky-500 border border-sky-500/20">
+                                    <Icon name="Activity" className="w-6 h-6" />
+                                </div>
+                                <div>
+                                    <span class="text-xl font-bold tracking-tight text-white block">MyJeevan</span>
+                                    <span class="text-xs text-slate-400 font-mono tracking-widest uppercase">Health Command</span>
+                                </div>
+                            </div>
+
+                            <div class="px-6 py-4 bg-slate-950 border-b border-slate-900/50">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-mono text-emerald-500 flex items-center">
+                                        <span class="w-2 h-2 bg-emerald-500 rounded-full animate-ping mr-2"></span>
+                                        SECURE CONSOLE
+                                    </span>
+                                    <span class="text-xs font-mono text-slate-500">v4.12-PRO</span>
+                                </div>
+                            </div>
+
+                            {/* Navigation Links */}
+                            <nav class="p-4 space-y-1">
+                                <button 
+                                    onClick={() => { setActiveTab('dashboard'); logAction("Navigated to Master Dashboard"); }} 
+                                    class={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition font-medium ${activeTab === 'dashboard' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+                                >
+                                    <Icon name="LayoutDashboard" />
+                                    <span>Master Analytics</span>
+                                </button>
+                                <button 
+                                    onClick={() => { setActiveTab('emr'); logAction("Opened Patient Registry & EMR Console"); }} 
+                                    class={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition font-medium ${activeTab === 'emr' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+                                >
+                                    <Icon name="FolderGit" />
+                                    <span>EMR Registry</span>
+                                </button>
+                                <button 
+                                    onClick={() => { setActiveTab('wards'); logAction("Accessed Ward Management Grid"); }} 
+                                    class={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition font-medium ${activeTab === 'wards' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+                                >
+                                    <Icon name="BedDouble" />
+                                    <span>Ward Admissions</span>
+                                </button>
+                                <button 
+                                    onClick={() => { setActiveTab('billing'); logAction("Navigated to Billing & Insurance Panel"); }} 
+                                    class={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition font-medium ${activeTab === 'billing' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+                                >
+                                    <Icon name="ReceiptText" />
+                                    <span>Billing & Insurance</span>
+                                </button>
+                            </nav>
+                        </div>
+
+                        {/* Telemetry Status Panel */}
+                        <div class="p-6 bg-slate-950/80 border-t border-slate-800/80">
+                            <span class="text-xs font-semibold text-slate-400 block mb-2">TELEMETRY LINK STATUS</span>
+                            <div class="space-y-2 font-mono text-[10px] text-slate-500">
+                                <div class="flex justify-between">
+                                    <span>EMR DB MIRROR:</span>
+                                    <span class="text-emerald-500">STABLE</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>SSL ENCRYPTION:</span>
+                                    <span class="text-emerald-500">AES-256</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>HL7 API FEED:</span>
+                                    <span class="text-emerald-500">CONNECTED</span>
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
+
+                    {/* Workspaces */}
+                    <main class="flex-grow flex flex-col overflow-hidden bg-slate-950">
+                        {vitalAlert && (
+                            <div class="bg-rose-950/80 border-b border-rose-500/40 px-6 py-3 flex items-center justify-between text-rose-200 animate-pulse">
+                                <div class="flex items-center space-x-3">
+                                    <Icon name="ShieldAlert" className="text-rose-500 w-5 h-5" />
+                                    <span class="text-sm">
+                                        <strong class="font-bold">TELEMETRY WARNING:</strong> Patient <span class="underline">{vitalAlert.patient}</span> telemetry exhibits anomalous <strong>{vitalAlert.metric}</strong> reading of <span class="text-white font-mono bg-rose-900 px-2 py-0.5 rounded">{vitalAlert.value}</span>.
+                                    </span>
+                                </div>
+                                <button onClick={resolveAlert} class="bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold px-3 py-1 rounded transition">
+                                    Ack & Silence
+                                </button>
+                            </div>
+                        )}
+
+                        <header class="h-20 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-8 z-10">
+                            <div>
+                                <h1 class="text-2xl font-extrabold text-white tracking-tight">Clinical Console</h1>
+                                <p class="text-xs text-slate-400 font-mono">MyJeevan Health • Main Campus Control • Live Telemetry Active</p>
+                            </div>
+                            <div class="flex items-center space-x-4">
+                                <div class="bg-slate-800/80 border border-slate-700/50 rounded-xl px-4 py-2 flex items-center space-x-3">
+                                    <span class="relative flex h-3.5 w-3.5">
+                                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                        <span class="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500"></span>
+                                    </span>
+                                    <span class="text-sm font-semibold text-slate-300">Live Server Mirror</span>
+                                </div>
+                            </div>
+                        </header>
+
+                        <div class="flex-grow overflow-y-auto p-8">
+                            
+                            {/* TAB: Dashboard */}
+                            {activeTab === 'dashboard' && (
+                                <div class="space-y-8">
+                                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                        <div class="bg-slate-900 border border-slate-800/80 rounded-2xl p-6 relative">
+                                            <div class="flex justify-between items-start">
+                                                <div>
+                                                    <span class="text-xs font-mono text-slate-400 block tracking-wider uppercase">Active In-patients</span>
+                                                    <span class="text-4xl font-extrabold text-white mt-2 block">{patients.length + 138}</span>
+                                                </div>
+                                                <div class="p-3 bg-sky-500/10 text-sky-400 rounded-xl border border-sky-500/20">
+                                                    <Icon name="Users" />
+                                                </div>
+                                            </div>
+                                            <div class="mt-4 flex items-center text-xs text-emerald-400 font-medium">
+                                                <Icon name="TrendingUp" className="w-4 h-4 mr-1" />
+                                                <span>+12% vs last month</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="bg-slate-900 border border-slate-800/80 rounded-2xl p-6 relative">
+                                            <div class="flex justify-between items-start">
+                                                <div>
+                                                    <span class="text-xs font-mono text-slate-400 block tracking-wider uppercase">Critical Admissions</span>
+                                                    <span class="text-4xl font-extrabold text-rose-500 mt-2 block">{vitalAlert ? 9 : 8}</span>
+                                                </div>
+                                                <div class="p-3 bg-rose-500/10 text-rose-400 rounded-xl border border-rose-500/20">
+                                                    <Icon name="Activity" />
+                                                </div>
+                                            </div>
+                                            <div class="mt-4 flex items-center text-xs text-rose-400 font-medium">
+                                                <Icon name="AlertTriangle" className="w-4 h-4 mr-1" />
+                                                <span>Live Telemetry Alerts Active</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="bg-slate-900 border border-slate-800/80 rounded-2xl p-6 relative">
+                                            <div class="flex justify-between items-start">
+                                                <div>
+                                                    <span class="text-xs font-mono text-slate-400 block tracking-wider uppercase">ICU Bed Occupancy</span>
+                                                    <span class="text-4xl font-extrabold text-emerald-400 mt-2 block">88.4%</span>
+                                                </div>
+                                                <div class="p-3 bg-emerald-500/10 text-emerald-400 rounded-xl border border-emerald-500/20">
+                                                    <Icon name="Bed" />
+                                                </div>
+                                            </div>
+                                            <div class="mt-4 flex items-center text-xs text-emerald-400 font-medium">
+                                                <span>12 beds currently available</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="bg-slate-900 border border-slate-800/80 rounded-2xl p-6 relative">
+                                            <div class="flex justify-between items-start">
+                                                <div>
+                                                    <span class="text-xs font-mono text-slate-400 block tracking-wider uppercase">Pending Claims Cover</span>
+                                                    <span class="text-4xl font-extrabold text-amber-500 mt-2 block">₹ 9.15 L</span>
+                                                </div>
+                                                <div class="p-3 bg-amber-500/10 text-amber-400 rounded-xl border border-amber-500/20">
+                                                    <Icon name="ShieldCheck" />
+                                                </div>
+                                            </div>
+                                            <div class="mt-4 flex items-center text-xs text-amber-400 font-medium">
+                                                <span>{financials.filter(f => f.status === 'Pending').length} corporate policies under review</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Charts Section */}
+                                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                        <div class="lg:col-span-2 bg-slate-900 border border-slate-800/80 rounded-2xl p-6">
+                                            <div class="flex items-center justify-between mb-6">
+                                                <div>
+                                                    <h3 class="text-lg font-extrabold text-white">Daily Admission Load Profile</h3>
+                                                    <p class="text-xs text-slate-400">Total hospital admissions tracked dynamically</p>
+                                                </div>
+                                                <span class="text-xs font-mono bg-slate-800 px-3 py-1 rounded text-slate-300 border border-slate-700/50">LIVE REFRESH</span>
+                                            </div>
+                                            <div class="h-72">
+                                                <canvas ref={lineChartRef}></canvas>
+                                            </div>
+                                        </div>
+
+                                        <div class="bg-slate-900 border border-slate-800/80 rounded-2xl p-6">
+                                            <div class="flex items-center justify-between mb-6">
+                                                <div>
+                                                    <h3 class="text-lg font-extrabold text-white">Ward Allocation Profile</h3>
+                                                    <p class="text-xs text-slate-400">Resource distribution index</p>
+                                                </div>
+                                            </div>
+                                            <div class="h-72 flex items-center justify-center">
+                                                <canvas ref={doughnutChartRef}></canvas>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* TAB: EMR Registry */}
+                            {activeTab === 'emr' && (
+                                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 h-[calc(100vh-220px)] overflow-hidden">
+                                    {/* Patients List Directory */}
+                                    <div class="bg-slate-900 border border-slate-800 rounded-2xl flex flex-col overflow-hidden">
+                                        <div class="p-6 border-b border-slate-800">
+                                            <h3 class="text-lg font-bold text-white mb-4">Patient Registry</h3>
+                                            <div class="relative">
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="Search Patient Name, ID or Symptom..." 
+                                                    value={searchQuery}
+                                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                                    class="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 pl-10 pr-4 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition"
+                                                />
+                                                <div class="absolute left-3.5 top-3.5 text-slate-500">
+                                                    <Icon name="Search" className="w-4 h-4" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="flex-grow overflow-y-auto p-4 space-y-3">
+                                            {filteredPatients.map(p => (
+                                                <div 
+                                                    key={p.id}
+                                                    onClick={() => setSelectedPatient(p)}
+                                                    class={`p-4 rounded-xl cursor-pointer border transition ${selectedPatient.id === p.id ? 'bg-sky-500/10 border-sky-500/40 text-white' : 'bg-slate-950/50 border-slate-800/60 text-slate-300 hover:bg-slate-800/35'}`}
+                                                >
+                                                    <div class="flex justify-between items-start">
+                                                        <h4 class="font-bold text-sm">{p.name}</h4>
+                                                        <span class={`text-[10px] px-2 py-0.5 rounded font-mono ${p.status === 'Critical' ? 'bg-rose-500/10 text-rose-400' : p.status === 'Observation' ? 'bg-amber-500/10 text-amber-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                                                            {p.status}
+                                                        </span>
+                                                    </div>
+                                                    <div class="flex justify-between items-center mt-2 text-xs text-slate-400">
+                                                        <span>{p.gender}, {p.age} Yrs</span>
+                                                        <span class="font-mono text-[10px]">{p.id}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Patient Electronic Health Record Details */}
+                                    <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col overflow-y-auto p-8 space-y-6">
+                                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center pb-6 border-b border-slate-800/80">
+                                            <div>
+                                                <span class="text-xs font-mono text-sky-500 uppercase tracking-widest">{selectedPatient.id}</span>
+                                                <h2 class="text-2xl font-bold text-white mt-1">{selectedPatient.name}</h2>
+                                                <p class="text-sm text-slate-400 mt-1">Diagnosis: <strong class="text-slate-200">{selectedPatient.condition}</strong></p>
+                                            </div>
+                                            <div class="mt-4 md:mt-0 flex gap-3">
+                                                <button onClick={() => setIsPrescriptionModalOpen(true)} class="bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition flex items-center space-x-2">
+                                                    <Icon name="Plus" className="w-4 h-4" />
+                                                    <span>Add Medication</span>
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Vitals Grid */}
+                                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800/80">
+                                                <span class="text-xs text-slate-400">Heart Rate</span>
+                                                <div class="text-xl font-bold text-white mt-1 flex items-center space-x-2">
+                                                    <Icon name="Heart" className="text-rose-500 w-5 h-5" />
+                                                    <span>{selectedPatient.vitals.hr} bpm</span>
+                                                </div>
+                                            </div>
+                                            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800/80">
+                                                <span class="text-xs text-slate-400">Blood Pressure</span>
+                                                <div class="text-xl font-bold text-white mt-1 flex items-center space-x-2">
+                                                    <Icon name="ShieldAlert" className="text-sky-500 w-5 h-5" />
+                                                    <span>{selectedPatient.vitals.bp}</span>
+                                                </div>
+                                            </div>
+                                            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800/80">
+                                                <span class="text-xs text-slate-400">SPO2 Status</span>
+                                                <div class="text-xl font-bold text-emerald-400 mt-1 flex items-center space-x-2">
+                                                    <Icon name="Activity" className="text-emerald-500 w-5 h-5" />
+                                                    <span>{selectedPatient.vitals.spo2}</span>
+                                                </div>
+                                            </div>
+                                            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800/80">
+                                                <span class="text-xs text-slate-400">Temperature</span>
+                                                <div class="text-xl font-bold text-white mt-1 flex items-center space-x-2">
+                                                    <Icon name="Thermometer" className="text-amber-500 w-5 h-5" />
+                                                    <span>{selectedPatient.vitals.temp}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Clinical Dossier details */}
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div class="space-y-4">
+                                                <h4 class="text-sm font-semibold tracking-wider uppercase text-slate-400 border-b border-slate-800 pb-2">Active Prescriptions</h4>
+                                                <div class="space-y-2">
+                                                    {selectedPatient.meds.length === 0 ? (
+                                                        <p class="text-xs text-slate-500 font-mono">No Active Medications</p>
+                                                    ) : (
+                                                        selectedPatient.meds.map((med, index) => (
+                                                            <div key={index} class="flex items-center justify-between p-3 bg-slate-950/80 border border-slate-800/60 rounded-xl text-sm">
+                                                                <span class="font-mono text-slate-200">{med}</span>
+                                                                <button onClick={() => deleteMed(index)} class="text-rose-500 hover:text-rose-400 transition p-1">
+                                                                    <Icon name="Trash2" className="w-4 h-4" />
+                                                                </button>
+                                                            </div>
+                                                        ))
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div class="space-y-4">
+                                                <h4 class="text-sm font-semibold tracking-wider uppercase text-slate-400 border-b border-slate-800 pb-2">Clinical Notes</h4>
+                                                <div class="p-4 bg-slate-950 border border-slate-800/80 rounded-xl text-xs text-slate-300 leading-relaxed font-mono">
+                                                    {selectedPatient.notes}
+                                                </div>
+                                                <div class="grid grid-cols-2 gap-4 text-xs font-mono text-slate-400 bg-slate-950/40 p-3 rounded-lg border border-slate-800/50">
+                                                    <div>Ward: <span class="text-white">{selectedPatient.ward}</span></div>
+                                                    <div>Bed: <span class="text-white">{selectedPatient.bed}</span></div>
+                                                    <div class="col-span-2">Consultant: <span class="text-sky-400 font-semibold">{selectedPatient.primaryPhysician}</span></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* TAB: Ward Admissions */}
+                            {activeTab === 'wards' && (
+                                <div class="space-y-8">
+                                    <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+                                        <div>
+                                            <h2 class="text-xl font-bold text-white">Live Ward Status Grid</h2>
+                                            <p class="text-xs text-slate-400 mt-1">Live Occupancy profile of special telemetry care and standard ICU modules.</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
+                                        {Object.keys(wardBeds).map((wardName) => (
+                                            <div key={wardName} class="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col space-y-4">
+                                                <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                                                    <h3 class="font-extrabold text-white">{wardName}</h3>
+                                                    <span class="text-xs font-mono bg-slate-950 px-2.5 py-1 rounded-md text-emerald-400 border border-slate-800">
+                                                        {wardBeds[wardName].filter(b => b.patient).length} / {wardBeds[wardName].length} BEDS OCCUPIED
+                                                    </span>
+                                                </div>
+
+                                                <div class="space-y-3">
+                                                    {wardBeds[wardName].map((bedObj, index) => (
+                                                        <div key={index} class="p-4 bg-slate-950 border border-slate-800/80 rounded-xl flex items-center justify-between">
+                                                            <div class="flex items-center space-x-3">
+                                                                <div class={`p-2 rounded-lg ${bedObj.patient ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+                                                                    <Icon name="Bed" className="w-5 h-5" />
+                                                                </div>
+                                                                <div>
+                                                                    <span class="text-xs font-mono font-semibold text-slate-400 block">{bedObj.bed}</span>
+                                                                    <span class="text-sm font-bold text-white mt-0.5">
+                                                                        {bedObj.patient ? bedObj.patient : <span class="text-slate-500 font-normal">Available</span>}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                            <div>
+                                                                {bedObj.patient ? (
+                                                                    <button 
+                                                                        onClick={() => dischargeBed(wardName, index)}
+                                                                        class="text-xs bg-rose-950/60 hover:bg-rose-900/60 text-rose-300 border border-rose-800/40 px-3 py-1.5 rounded-lg transition"
+                                                                    >
+                                                                        Discharge
+                                                                    </button>
+                                                                ) : (
+                                                                    <button 
+                                                                        onClick={() => setSelectedBedToAssign({ ward: wardName, index })}
+                                                                        class="text-xs bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-800/40 px-3 py-1.5 rounded-lg transition"
+                                                                    >
+                                                                        Assign
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* TAB: Billing & Claims Panel */}
+                            {activeTab === 'billing' && (
+                                <div class="space-y-8">
+                                    <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+                                        <div>
+                                            <h2 class="text-xl font-bold text-white">Billing & Insurance Diagnostics</h2>
+                                            <p class="text-xs text-slate-400 mt-1">Realtime audit, claim status, and transaction validation pipeline.</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Financial Dashboard Cards */}
+                                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+                                            <span class="text-xs font-mono text-slate-400">TOTAL INVOICED REVENUE</span>
+                                            <div class="text-2xl font-extrabold text-white mt-2">
+                                                ₹ {financials.reduce((sum, current) => sum + current.billAmount, 0).toLocaleString('en-IN')}
+                                            </div>
+                                        </div>
+                                        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+                                            <span class="text-xs font-mono text-emerald-400">APPROVED INSURANCE CLAIMS</span>
+                                            <div class="text-2xl font-extrabold text-emerald-400 mt-2">
+                                                ₹ {financials.filter(f => f.status === 'Approved').reduce((sum, current) => sum + current.claimedAmount, 0).toLocaleString('en-IN')}
+                                            </div>
+                                        </div>
+                                        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+                                            <span class="text-xs font-mono text-amber-500">PENDING & DISPUTED AUDITS</span>
+                                            <div class="text-2xl font-extrabold text-amber-500 mt-2">
+                                                ₹ {financials.filter(f => f.status !== 'Approved').reduce((sum, current) => sum + current.claimedAmount, 0).toLocaleString('en-IN')}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Claims Datatable */}
+                                    <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                                        <div class="p-6 border-b border-slate-800 flex justify-between items-center">
+                                            <h3 class="font-extrabold text-white">Claims Audit Registry</h3>
+                                            <span class="text-xs font-mono text-slate-400">COMPLIANCE PROTOCOL IRDA-v26</span>
+                                        </div>
+                                        <div class="overflow-x-auto">
+                                            <table class="w-full text-left text-sm text-slate-300">
+                                                <thead class="bg-slate-950 text-slate-400 uppercase text-[10px] tracking-widest font-mono">
+                                                    <tr>
+                                                        <th class="p-4 pl-6">TXN ID</th>
+                                                        <th class="p-4">Patient</th>
+                                                        <th class="p-4">Insurance Policy Key</th>
+                                                        <th class="p-4 text-right">Invoiced (₹)</th>
+                                                        <th class="p-4 text-right">Claim Cover (₹)</th>
+                                                        <th class="p-4 text-center">Status</th>
+                                                        <th class="p-4 text-center">Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody class="divide-y divide-slate-800/60 font-mono">
+                                                    {financials.map((txn) => (
+                                                        <tr key={txn.id} class="hover:bg-slate-800/20">
+                                                            <td class="p-4 pl-6 font-semibold text-slate-400">{txn.id}</td>
+                                                            <td class="p-4 text-white font-sans font-medium">{txn.patient}</td>
+                                                            <td class="p-4 text-slate-400">{txn.policyId}</td>
+                                                            <td class="p-4 text-right text-white font-semibold">₹ {txn.billAmount.toLocaleString('en-IN')}</td>
+                                                            <td class="p-4 text-right text-emerald-400 font-semibold">₹ {txn.claimedAmount.toLocaleString('en-IN')}</td>
+                                                            <td class="p-4 text-center">
+                                                                <span class={`text-[10px] px-2.5 py-1 rounded font-bold uppercase tracking-wider ${txn.status === 'Approved' ? 'bg-emerald-500/10 text-emerald-400' : txn.status === 'Pending' ? 'bg-amber-500/10 text-amber-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                                                                    {txn.status}
+                                                                </span>
+                                                            </td>
+                                                            <td class="p-4 text-center flex items-center justify-center space-x-2">
+                                                                {txn.status !== 'Approved' && (
+                                                                    <button 
+                                                                        onClick={() => updateClaimStatus(txn.id, 'Approved')}
+                                                                        class="px-2.5 py-1 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 text-xs rounded border border-emerald-800/40 transition"
+                                                                    >
+                                                                        Approve
+                                                                    </button>
+                                                                )}
+                                                                {txn.status === 'Pending' && (
+                                                                    <button 
+                                                                        onClick={() => updateClaimStatus(txn.id, 'Disputed')}
+                                                                        class="px-2.5 py-1 bg-rose-950 hover:bg-rose-900 text-rose-300 text-xs rounded border border-rose-800/40 transition"
+                                                                    >
+                                                                        Dispute
+                                                                    </button>
+                                                                )}
+                                                                {txn.status === 'Approved' && (
+                                                                    <span class="text-xs text-slate-500 italic">No Action</span>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                        </div>
+
+                        {/* Logs Diagnostic Console */}
+                        <div class="h-44 border-t border-slate-800 bg-slate-900/80 flex flex-col justify-between overflow-hidden">
+                            <div class="p-4 border-b border-slate-800 bg-slate-950 flex items-center justify-between text-xs font-mono">
+                                <span class="text-slate-400 flex items-center">
+                                    <span class="w-2 h-2 bg-sky-500 rounded-full animate-ping mr-2"></span>
+                                    ENTERPRISE SYSTEM DIAGNOSTIC OUTPUT
+                                </span>
+                                <span class="text-slate-500 font-bold">PORT: SECURE-SSL</span>
+                            </div>
+                            <div class="flex-grow overflow-y-auto p-4 space-y-1 font-mono text-[11px] text-emerald-500/90 select-text">
+                                {systemLog.map((log, idx) => (
+                                    <div key={idx} class="leading-relaxed">
+                                        <span class="text-emerald-700">&gt;&gt;</span> {log}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </main>
+
+                    {/* Injectable Modals inside Application Content context */}
+                    <ModalPrescription 
+                        isOpen={isPrescriptionModalOpen}
+                        onClose={() => setIsPrescriptionModalOpen(false)}
+                        onSave={addPrescription}
+                        newMed={newMed}
+                        setNewMed={setNewMed}
+                    />
+
+                    <BedAssignerModal 
+                        activeBed={selectedBedToAssign}
+                        onClose={() => setSelectedBedToAssign(null)}
+                        onAssign={allocateBed}
+                        patientName={assignPatientName}
+                        setPatientName={setAssignPatientName}
+                    />
+                </div>
+            );
+        }
+
+        const container = document.getElementById('root');
+        const root = ReactDOM.createRoot(container);
+        root.render(<AppWrapper />);
+    </script>
+</body>
+</html>
